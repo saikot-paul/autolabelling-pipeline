@@ -2,11 +2,15 @@ import fire
 import math
 import re
 import time
+import numpy as np 
 import pandas as pd
 from prompt import *
 from llama import Dialog, Tokenizer, Llama
 from typing import List, Optional
 from functools import wraps
+
+
+np.random.seed(8)
 
 class LabelGenerator:
     """
@@ -240,7 +244,7 @@ class LabelGenerator:
         return top_k_words
     
     @time_function
-    def prepare_text(self, text_col='text', sdedup=False, sampling_col=None):
+    def prepare_text(self, text_col='text', sdedup=False, sampling_col=None, random=True):
         """
         Purpose: 
             - Function used to generate an array of text where each element represents the aggregation of text with respect to an individual cluster. 
@@ -280,8 +284,13 @@ class LabelGenerator:
         for i in range(-1, num_clusts): 
             subset = df[df['clust_id'] == i] 
             
-            if sampling_col is not None: 
+            if not random:
+                tmp = subset.head(40)
+                
+            elif sampling_col is not None: 
+                
                 sample_entities = df[sampling_col].nunique()
+                
                 if sample_entities > 1: 
                     tmp = self.stratified_sampling(subset, sampling_col, text_col)
                 else: 
@@ -426,8 +435,6 @@ class LabelGenerator:
         Returns: 
             - None 
         """
-        
-        
         
         self.build_generator()
         labels = []

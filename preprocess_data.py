@@ -30,7 +30,6 @@ class DataProcessor:
         
         self.file_path = file_path
         self.embd_model_path = embd_model_path
-        self.df = self.read_file()
         self.data = None
         self.rd = False 
         self.semdup = False
@@ -55,19 +54,23 @@ class DataProcessor:
             return result
         return wrapper
 
-    def read_file(self):
+    def read_file(self, col_to_drop_from=None):
         """
         Purpose: 
             - Read file that was passed in the constructor
             
         Args: 
-            - self 
+            - col_to_drop: Drop rows where a column is Nan
         
         Returns: 
             - dataframe (pandas.DataFrame): dataframe of the read file 
         """
-    
-        return pd.read_csv(self.file_path)
+        
+        if col_to_drop_from is not None: 
+            self.df = pd.read_csv(self.file_path).dropna(subset=col_to_drop_from).reset_index(drop=True)
+        else: 
+            self.df = pd.read_csv(self.file_path)
+                    
 
     def extract_url_helper(self, string):
         """
@@ -123,7 +126,43 @@ class DataProcessor:
         """
         
         return re.sub(r'[^\x00-\x7F]+', '', string)
+    
+    
+    def remove_emojis(self, text):
+        """
+        Removes emojis from the given text.
 
+        Args:
+            text (str): The input text containing emojis.
+
+        Returns:
+            str: The text with emojis removed.
+        """
+        # Emoji pattern
+        emoji_pattern = re.compile(
+            "["  
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F680-\U0001F6FF"  # transport & map symbols
+            "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            "\U00002500-\U00002BEF"  # Chinese characters
+            "\U00002702-\U000027B0"  # Dingbats
+            "\U00002702-\U000027B0"
+            "\U000024C2-\U0001F251"
+            "\U0001f926-\U0001f937"
+            "\U00010000-\U0010ffff"
+            "\u2640-\u2642"
+            "\u2600-\u2B55"
+            "\u200d"
+            "\u23cf"
+            "\u23e9"
+            "\u231a"
+            "\u3030"
+            "\ufe0f"
+            "]+", flags=re.UNICODE
+        )
+        return emoji_pattern.sub(r'', text)
+    
     def remove_url_helper(self, string):
         """
         Purpose: 
@@ -170,12 +209,29 @@ class DataProcessor:
         fstring = fstring.strip()
         
         return fstring
-
-    @time_function
-    def process_text(self, text_col=None):
+    
+    @time_function 
+    def filter_dataframe(self, filter_col, filter_val): 
         """
         Purpose: 
-            - Function that applies the non ascii character helper function and returns a clean series 
+            - Given a dataframe extract rows where the a column's (filter_col) matches a value (filter_val) 
+        
+        Args: 
+            - filter_col (str): column name to be filtered 
+            - filter-_val (any): value to be matched 
+        
+        Returns: 
+            - None: current instance's dataframe attribute (self.df) is updated to only contain rows in which the filter_col values match the filter_val
+        """
+        
+        self.df = self.df[~self.df[filter_col].isnull()].copy()
+        self.df = self.df[self.df[filter_col] == filter_val].copy()
+
+    @time_function
+    def process_text_all(self, text_col='text'):
+        """
+        Purpose: 
+            - Function that applies the non ascii characters and emojis from text 
         
         Args: 
             - text_col (str): column to clean
@@ -184,14 +240,29 @@ class DataProcessor:
             - text (pd.Series): column removed of special characters 
         """
         
-        if not text_col:
-            self.df['text'] = self.df['text'].apply(lambda x: self.format_str(x))
-            text = self.df['text'].apply(lambda x: self.remove_non_ascii(x))
-            return text
-        else:
-            self.df[text_col] = self.df[text_col].apply(lambda x: self.format_str(x))
-            text = self.df[text_col].apply(lambda x: self.remove_non_ascii(x))
-            return text
+        text = self.df[text_col].apply(lambda x: self.format_str(x))
+        text = text.apply(lambda x: self.remove_non_ascii(x))
+        text = text.apply(lambda x: self.remove_emojis(x))
+        
+        return text
+        
+    @time_function 
+    def process_text_emojis(self, text_col='text'): 
+        """
+        Purpose: 
+            - Function that removes emojis from text 
+        
+        Args: 
+            - text_col (str): column to remove emojis 
+        
+        Returns: 
+            - text (pd.Series): column removed of emojis
+        """
+        
+        text = self.df[text_col].apply(lambda x: self.remove_emojis(x))
+        text = text.apply(lambda x: self.format_str(x))
+        
+        return text 
 
     @time_function
     def extract_url(self, col_name=None):
@@ -263,7 +334,7 @@ class DataProcessor:
         return data
 
     @time_function
-    def create_embeddings(self, text=None, embd_model_path=None):
+    def create_embeddings(self, text=None, text_col='text', just_emoji = False, embd_model_path=None):
         """
         Purpose: 
             - Create embeddings from text, and sets the instance data variable to the embeddings created 
@@ -282,9 +353,15 @@ class DataProcessor:
             model = SentenceTransformer(file_path,  device='cuda')
 
         if text:
+            text = list(text)
             data = model.encode(text)
         else:
-            text = self.process_text().to_list()
+            
+            if just_emoji: 
+                text = self.process_text_emojis(text_col).to_list()
+            else: 
+                text = self.process_text_all(text_col).to_list()
+                
             data = model.encode(text)
 
         self.data = data
@@ -324,22 +401,20 @@ class DataProcessor:
         reducer = UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, random_state=8)
         
         reduced_data = reducer.fit_transform(data) 
+        print(f'\t- Reduced data shape: {reduced_data.shape}')
         
         self.data = reduced_data 
         cols = [f'Dim{i}' for i in range(reduced_data.shape[-1])]
         tmp_df = pd.DataFrame(reduced_data, columns=cols)
+        tmp_df.reset_index(drop=True, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
+        print(f'\t- Temporary DataFrame Shape: {tmp_df.shape}')
+        print(f'\t- Self DataFrame Shape Before Concatenation: {self.df.shape}')
         self.df = pd.concat([self.df, tmp_df], axis=1)
+        print(f'\t- Self DataFrame Shape After Concatenation: {self.df.shape}')
         
         return reduced_data 
     
-    def calc_dist_to_centroid(self, groupby, clusterer, lbl_col='klabels'): 
-        label = groupby[lbl_col].unique()[0]
-        centroid = clusterer.cluster_centers_[label]
-        embd = np.vstack(groupby['embeddings'])
-    
-        groupby['cosine_sim'] = cosine_sims = np.dot(embd, centroid) / (np.linalg.norm(embd) * np.linalg.norm(centroid))
-    
-        return groupby
     
     @time_function
     def sdedup(self, data=None, n_clusters=600, threshold=0.9999): 
@@ -422,7 +497,9 @@ class DataProcessor:
             min_cluster_size = 15 
                 
         clusterer = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples, cluster_selection_epsilon=epsilon)
-
+        print(f'\t- Labels shape {data.shape}')
+        print(f'\t- DataFrame shape {self.df.shape}')
+        
         labels = clusterer.fit_predict(data)
         self.df['clust_id'] = labels
         print(f'\t- Number of clusters: {self.df.clust_id.nunique()}')
@@ -443,7 +520,7 @@ class DataProcessor:
         """
         
         if not cols:
-            self.df['text'] = self.df['text'].str.strip()
+            self.df['text'] = self.df['text'].apply(lambda x: self.format_str(x))
             columns = ['text', 'clust_id']
             
             if self.rd:
