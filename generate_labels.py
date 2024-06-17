@@ -25,7 +25,7 @@ class LabelGenerator:
                  max_seq_len: int = 512,
                  max_batch_size: int = 10,
                  max_gen_len: Optional[int] = None, 
-                 sys_prompt_id: str = None, 
+                 cove_id: str = None, 
                  output_path: str = None,
                  label_col: str = None
                  ):
@@ -46,7 +46,7 @@ class LabelGenerator:
         self.cluster_text = []
         self.cluster_text_length = []
         self.cluster_text_items = []
-        self.sys_prompt_id = sys_prompt_id
+        self.cove_id = cove_id
 
     @staticmethod
     def time_function(func):
@@ -365,14 +365,7 @@ class LabelGenerator:
         self.build_generator()
         labels = []
         
-        if (self.sys_prompt_id == 1): 
-            sys_prompt = self.system(sys_p1)
-        
-        if (self.sys_prompt_id == 2): 
-            sys_prompt = self.system(sys_p2)
-            
-        if (self.sys_prompt_id == 3): 
-            sys_prompt = self.system(sys_p3)
+        sys_prompt = self.system(sys_p2)
             
         for i, t in enumerate(self.cluster_text):
             user_prompt = self.user(prompt_p1 + t + prompt_p2)
@@ -439,14 +432,13 @@ class LabelGenerator:
         self.build_generator()
         labels = []
         
-        if (self.sys_prompt_id == 1): 
-            sys_prompt = self.system(sys_p1)
+        if (self.cove_id == 1): 
+            questions = questions_c1
         
-        if (self.sys_prompt_id == 2): 
-            sys_prompt = self.system(sys_p2)
+        if (self.cove_id == 2): 
+            questions = questions_c2
             
-        if (self.sys_prompt_id == 3): 
-            sys_prompt = self.system(sys_p3)
+        sys_prompt = self.system(sys_p2)
             
         for i, t in enumerate(self.cluster_text):
             user_prompt = self.user(prompt_p1 + t + prompt_p2)

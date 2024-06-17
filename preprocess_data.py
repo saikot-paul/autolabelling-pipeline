@@ -226,7 +226,34 @@ class DataProcessor:
         
         self.df = self.df[~self.df[filter_col].isnull()].copy()
         self.df = self.df[self.df[filter_col] == filter_val].copy()
-
+    
+    @time_function
+    def filter_by_language(self, lang_col='language'): 
+        """
+        Purpose: 
+            - Extract dataframe rows to languages supported by Llama3
+            - Languages: 
+                - English 
+                - Portugese
+                - French 
+                - Spanish 
+                - Italian 
+                - German 
+                - Dutch 
+                - Japanese 
+                - Korean 
+                - Russian 
+        
+        Arguments: 
+            - lang_col (str): column that states language 
+        
+        Return: 
+            - None: sets the dataframe attribute to values that only are in the supported languages
+        """
+        
+        languages = ['nl', 'en', 'fr', 'de', 'it', 'ja', 'ko', 'pt', 'ru', 'es'] 
+        self.df = self.df[self.df[lang_col].isin(languages)] 
+        
     @time_function
     def process_text_all(self, text_col='text'):
         """

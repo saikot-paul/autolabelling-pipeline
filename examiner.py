@@ -164,6 +164,8 @@ class Examiner:
             - text_col (str): 
         """        
 
+        print('=========================================================================')
+
         prompt_p1 = f'Below is an exerpt of a cluster where the text was used to generate a label.\nText: "{txt}"'
         prompt_p2 = f'\nHere is the label created for the text. Label: "{lbl}"'
         prompt_p3 = """
@@ -176,26 +178,25 @@ class Examiner:
         
 
         results = self.generate_chat([og_q, og_a, prompt])
-
-        print(results[0]['generation']['content'])
-
-
         
-    def generate_chat(self, item): 
-        results = self.generator.chat_completion(
-                [item], 
-                max_gen_len=self.max_gen_len, 
-                temperature = self.temperature, 
-                top_p = self.top_p
-            ) 
+        print(f'>User:\n{prompt_p1}')
+        print(f'>Assistant:\n{prompt_p2}')
+        print(f'>User:\n{prompt_p3}')
+        print(f">Assistant:\n{results[0]['generation']['content']}")
+
+
+"""
+def main(path: str, label: str): 
             
-        return results
-            
-examiner = Examiner(ckpt_dir='Meta-Llama-3-8B-Instruct/', tokenizer_path='Meta-Llama-3-8B-Instruct/tokenizer.model')
+    examiner = Examiner(ckpt_dir='Meta-Llama-3-8B-Instruct/', tokenizer_path='Meta-Llama-3-8B-Instruct/tokenizer.model')
 
-df = pd.read_csv('./results/portugese/dummy_output_q2.csv')
+    df = pd.read_csv(path)
 
-txt_lbl = zip(df['Text'].to_list(), df['CoVe_Q2'].to_list())
+    txt_lbl = zip(df['Text'].to_list(), df[label].to_list())
 
-for txt, lbl in txt_lbl: 
-    examiner.examine_labels(txt, lbl)
+    for txt, lbl in txt_lbl: 
+        examiner.examine_labels(txt, lbl)
+        
+if __name__ == '__main__': 
+    fire.Fire(main)
+"""

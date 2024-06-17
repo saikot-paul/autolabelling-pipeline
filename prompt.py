@@ -56,8 +56,16 @@ sys_p2 = """You are a data annotator. You will be given text that is representat
 
 sys_p3 = """You are a data annotator. You will be given text that is representative of a cluster. Your job is to create a label for the representative text. Create a label such that it is: descriptive, concise, and aligns with the content of the representative text. \nReturn the label for the given body of text in this format: \n\nLabel: ".....".
 """
-        
-questions = [
+
+questions_c1 = [
+                'Is this label informative of the representational text originally provided?', 
+                'Does the label accurately identify the common themes and topics spoken in the representational text?', 
+                'Does the label accurately identify the narratives in the representational text?', 
+                'What is done well and what could be done better?', 
+                'Gathering the answers and insight gained from the previous questions recreate a SINGLE label  that is less than or equal to 15 words for the representational text.\nReturn in the format\n Label: "..."'
+            ] 
+
+questions_c2 = [
                 "What are the main themes, messages and topics discussed in the representational text? Keep answers concise.", 
                 "What are the main narratives in the representational text? Keep answers concise.", 
                 "What are the top 10 keywords and/or entities spoken about in the representational text? Keep answers concise.", 
