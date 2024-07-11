@@ -4,7 +4,6 @@ import re
 import time
 import numpy as np
 import pandas as pd
-from examiner import Examiner
 from prompt import *
 from llama import Dialog, Tokenizer, Llama
 from typing import List, Optional
@@ -193,16 +192,35 @@ class LabelGenerator:
         """
 
         total_tokens = self.content_len
-        limit = math.floor(self.max_seq_len * 0.75)
+
+        limit = math.floor(self.max_seq_len * 0.5) - self.content_len
         temp_text = []
 
         for _, row in df.iterrows():
-            if row['num_tokens'] + total_tokens > limit:
-                break
-            temp_text.append(row[text_col])
-            total_tokens += row['num_tokens']
+            text = row[text_col]
 
-        return "***".join(temp_text)
+            try:
+                # Check if the text is a string or bytes and decode appropriately
+                if isinstance(text, str):
+                    decoded_text = text
+                elif isinstance(text, bytes):
+                    decoded_text = text.decode('utf-8', errors='ignore')
+                else:
+                    raise ValueError(f"Unsupported text type: {type(text)}")
+
+                cur_tokens = len(self.tokenizer.encode(
+                    decoded_text, eos=True, bos=True))
+
+                if cur_tokens + total_tokens < limit:
+                    temp_text.append(decoded_text)
+                    total_tokens += cur_tokens
+                else:
+                    break
+            except (UnicodeDecodeError, ValueError) as e:
+                print(f"Error processing text: {text}, Error: {e}")
+                continue
+
+        return "\n".join(temp_text)
 
     def get_stopwords(self, path='stopwords.txt'):
         """
@@ -370,6 +388,8 @@ class LabelGenerator:
             user_prompt = self.user(user_prompt + t + prompt_p2)
             self.dialogs.append([system_prompt, user_prompt])
 
+        print(f'\t- Number of Prompts: {i}')
+
         for i, item in enumerate(self.dialogs):
             results = self.generator.chat_completion(
                 [item],
@@ -428,62 +448,75 @@ class LabelGenerator:
         Returns: 
             - None 
         """
+        try:
+            self.build_generator()
+            labels = []
+            system_prompt = self.system(system_prompt)
 
-        self.build_generator()
-        labels = []
-        system_prompt = self.system(system_prompt)
+            for i, t in enumerate(self.cluster_text):
 
-        for i, t in enumerate(self.cluster_text):
+                prompt = self.user(user_prompt + t + prompt_p2)
+                self.dialogs.append([system_prompt, prompt])
 
-            prompt = self.user(user_prompt + t + prompt_p2)
-            self.dialogs.append([system_prompt, prompt])
+            for i, item in enumerate(self.dialogs):
 
-        for i, item in enumerate(self.dialogs):
+                print(
+                    '======================================================================================')
+                print(f'Cluster: {i}')
 
-            print(
-                '======================================================================================')
+                half = len(self.cluster_text) // 2
+                s = 'Representational Text Truncated: ' + \
+                    self.cluster_text[i][:half] + '\n'
 
-            results = self.generate_chat(item)
-            item.append(results[0]['generation'])
+                prompt_len = len(self.tokenizer.encode(
+                    (item[-1]['content']), bos=True, eos=True))
+                print(f'Prompt Length: {prompt_len}')
+                print(f'Sequence Length: {self.max_seq_len}')
+                print(s)
 
-            print(f' Representational Text Truncated: {
-                  self.cluster_text[i][:300]}\n')
-            for q in cove_questions:
-                user_q = self.user(q)
-                item.append(user_q)
-                print(f'>User: {q}\n')
+                prompt = item[-1]['content']
                 results = self.generate_chat(item)
-                content = results[0]['generation']['content']
                 item.append(results[0]['generation'])
-                print(f'>Assistant: {content}\n')
 
-            tmp = results[0]['generation']['content']
-            labels.append(tmp)
+                for q in cove_questions:
+                    user_q = self.user(q)
+                    item.append(user_q)
+                    print(f'>User: {q}\n')
+                    results = self.generate_chat(item)
+                    content = results[0]['generation']['content']
+                    item.append(results[0]['generation'])
+                    print(f'>Assistant: {content}\n')
 
-        num_clusts = range(-1, self.df['clust_id'].nunique()-1)
-        text = [t.strip() for t in self.cluster_text]
-        counts = self.df.clust_id.value_counts().sort_index()
+                tmp = results[0]['generation']['content']
+                print(f'>Assistant: {tmp}')
+                labels.append(tmp)
 
-        label_col = self.label_col
+            num_clusts = range(-1, self.df['clust_id'].nunique()-1)
+            text = [t.strip() for t in self.cluster_text]
+            counts = self.df.clust_id.value_counts().sort_index()
 
-        self.output_df = pd.DataFrame({
-            'Cluster': num_clusts,
-            'Text': text,
-            label_col: labels,
-            'Cluster Count': counts
-        })
+            label_col = self.label_col
 
-        self.output_df[label_col] = self.output_df[label_col].apply(
-            lambda x: self.extract_title(x))
-        self.output_df['Text'] = self.output_df['Text'].str.strip()
+            self.output_df = pd.DataFrame({
+                'Cluster': num_clusts,
+                'Text': text,
+                label_col: labels,
+                'Cluster Count': counts
+            })
 
-        label_mapping = dict(zip(num_clusts, labels))
-        self.df[label_col] = self.df['clust_id'].map(label_mapping)
-        self.df[label_col] = self.df[label_col].apply(
-            lambda x: self.extract_title(x))
+            self.output_df[label_col] = self.output_df[label_col].apply(
+                lambda x: self.extract_title(x))
+            self.output_df['Text'] = self.output_df['Text'].str.strip()
 
-        self.df['format_text'] = self.df['text'].apply(
-            lambda x: self.format_str(str(x)))
+            label_mapping = dict(zip(num_clusts, labels))
+            self.df[label_col] = self.df['clust_id'].map(label_mapping)
+            self.df[label_col] = self.df[label_col].apply(
+                lambda x: self.extract_title(x))
+
+            self.df['format_text'] = self.df['text'].apply(
+                lambda x: self.format_str(str(x)))
+        except Exception as e:
+            print(e)
 
     @time_function
     def generate_labels_pipeline(self, random, text_col='text'):
@@ -517,7 +550,7 @@ class LabelGenerator:
             prompt_p1 = user_prompt_list[self.user_id]
 
         self.content_len = len(self.tokenizer.encode(
-            (prompt_p1 + prompt_p2), bos=True, eos=True))
+            (prompt_p1 + prompt_p2), bos=True, eos=True)) + len(self.tokenizer.encode(system_prompt, bos=True, eos=True))
 
         self.prepare_text(text_col=text_col, random=random)
 
@@ -529,6 +562,7 @@ class LabelGenerator:
             self.generate_labels_cove(
                 system_prompt=system_prompt, user_prompt=prompt_p1, cove_questions=cove_questions)
 
+    @time_function
     def generate_chat(self, item):
         """
         Purpose: 

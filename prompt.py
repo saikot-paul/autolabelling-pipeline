@@ -8,6 +8,11 @@ prompt_p1 =
         3. Using the information gained from the steps above create a descriptive title that generalizes the text in 20 words or less
         \n\nText to label: \n
 
+
+prompt_p1_a = The following body of text represents a grouping, each piece of text is appended with: ***. They have been grouped together due to sharing common themes, meaning and sentiment. Given this cluster of text, create a description using the following framework:\n\n\t1. Analyze the text.\n\t2. Identify shared themes: Look for reccuring ideas, concepts and key messages.\n\t3. Identify shared topics/subjects.\n\t4. Identify the sentiment: Define the overall mood/tone of the text.\n\t5. Identify the narrative and ensure the narrative is reflected in the label \n\t6. Generate a concise, descriptive and informative label that captures the essence, messages, theme and of the text using the information gained by following the framework.\n\nRepresentational Text/Original Text:
+
+prompt_p1_8 = The following body of text is representative of a cluster. Each text/row is a portion of the same cluster. Given this text analyze and identify: \n\n\t1. Top 3 topics and themes.\n\t2.  Top 3 perspectives and narratives.\n\t3. Top 5 entities, items and persons of interest.\n\nUsing the themes, topics, narratives, perspectives and things of interest generate a single concise label. Representational/Clustered Text:\n\n
+
 prompt_p2 =
         \n\nTitle: 
 
@@ -42,32 +47,29 @@ questions = [
 
 """
 
-prompt_p1 = """The following body of text represents a grouping, each piece of text is appended with: ***. They have been grouped together due to sharing common themes, meaning and sentiment. Given this cluster of text, create a description using the following framework:\n\n\t1. Analyze the text.\n\t2. Identify shared themes: Look for reccuring ideas, concepts and key messages.\n\t3. Identify shared topics/subjects.\n\t4. Identify the sentiment: Define the overall mood/tone of the text.\n\t5. Identify the narrative \n\t6. Generate a concise, descriptive and informative label that captures the essence, messages, theme and of the text using the information gained by following the framework.\n\nRepresentational Text/Original Text:
-"""
+system_prompt_list = [
+    """You are a data annotator. You will be given text that is representative of a cluster. Your job is to create a label for the representative text. The following label will be judged on the following criteria: \n\n\t1. Informativeness\n\t2. Conciseness\n\t3. Generalizes the content of the representative text\n\t4. Less than 10 words.\n\t5. How well the label aligns with the overall content of the representative text.\n\nReturn ONLY the label for the given body of text in this format: \n\nLabel: ".....".
+    """,
+]
 
-prompt_p2 = """Return only the label in the following format\nLabel: "..."."""
+user_prompt_list = ["""The following body of text represents a grouping, each piece of text is appended with: ***. They have been grouped together due to sharing common themes, meaning and sentiment. Given this cluster of text, create a description using the following framework:\n\n\t1. Analyze the text.\n\t2. Identify shared themes: Look for reccuring ideas, concepts and key messages.\n\t3. Identify shared topics/subjects.\n\t4. Identify the sentiment: Define the overall mood/tone of the text.\n\t5. Identify the narrative \n\t6. Generate a concise, descriptive and informative label that captures the essence, messages, theme and of the text using the information gained by following the framework.\n\nRepresentational Text/Original Text:
+""", """The following body of text is representative of a cluster. Each text/row is a portion of the same cluster. Given this text analyze and identify: \n\n\t1. Top 3 topics and themes.\n\t2.  Top 3 perspectives and narratives.\n\t3. Top 5 entities, items and persons of interest.\n\nUsing the themes, topics, narratives, perspectives and things of interest generate a single concise label.Representational
+"""]
 
+cove_question_list = [
+    [
+        'Is this label informative of the representational text originally provided?',
+        'Does the label accurately identify the common themes and topics spoken in the representational text?',
+        'Does the label accurately identify the narratives in the representational text?',
+        'What is done well and what could be done better?',
+        'Gathering the answers and insight gained from the previous questions create a SINGLE better label  that is less than or equal to 15 words for the representational text.\nReturn in the format\n Label: "..."'
+    ],
+    [
+        "What are the main themes, messages and topics discussed in the representational text? Keep answers concise.",
+        "What are the main narratives in the representational text? Keep answers concise.",
+        "What are the top 10 keywords and/or entities spoken about in the representational text? Keep answers concise.",
+        'Using the information gained from the previous questions create a better label. The label should:\n\t1. Accurately reflect themes, messages and topics described in the representational text.\n\t2. Accurately portray narratives in the representational text.\n\t3. Use keywords and entities from the representational text.\n\t4. Be non-dramatic.\n\t5. Be less than or equal to 15 words\nReturn a SINGLE label in the format\nLabel: "..."'
+    ]
+]
 
-sys_p1 = """You are a data annotator. You will be given text that is representative of a cluster. Your job is to create a label for the representative text. The created label will be judged on the following criteria:\n\n\t1. Descriptiveness of label.\n\t2. Conciseness of the label.\n\t3. Informativeness of the label.\n\t4. How well the label aligns with the content of the representative text.\n\nReturn the label for the given body of text in this format: \n\nLabel: "...".
-"""
-
-sys_p2 = """You are a data annotator. You will be given text that is representative of a cluster. Your job is to create a label for the representative text. The following label will be judged on the following criteria: \n\n\t1. Informativeness\n\t2. Conciseness\n\t3. Generalizes the content of the representative text\n\t4. Less than 10 words.\n\t5. How well the label aligns with the overall content of the representative text.\n\nReturn ONLY the label for the given body of text in this format: \n\nLabel: ".....".
-"""
-
-sys_p3 = """You are a data annotator. You will be given text that is representative of a cluster. Your job is to create a label for the representative text. Create a label such that it is: descriptive, concise, and aligns with the content of the representative text. \nReturn the label for the given body of text in this format: \n\nLabel: ".....".
-"""
-
-questions_c1 = [
-                'Is this label informative of the representational text originally provided?', 
-                'Does the label accurately identify the common themes and topics spoken in the representational text?', 
-                'Does the label accurately identify the narratives in the representational text?', 
-                'What is done well and what could be done better?', 
-                'Gathering the answers and insight gained from the previous questions recreate a SINGLE label  that is less than or equal to 15 words for the representational text.\nReturn in the format\n Label: "..."'
-            ] 
-
-questions_c2 = [
-                "What are the main themes, messages and topics discussed in the representational text? Keep answers concise.", 
-                "What are the main narratives in the representational text? Keep answers concise.", 
-                "What are the top 10 keywords and/or entities spoken about in the representational text? Keep answers concise.", 
-                'Using the information gained from the previous questions create a label. The label should:\n\t1. Accurately reflect themes, messages and topics described in the representational text.\n\t2. Accurately portray narratives in the representational text.\n\t3. Use keywords and entities from the representational text.\n\t4. Be non-dramatic.\n\t5. Be less than or equal to 15 words\nReturn a SINGLE label in the format\nLabel: "..."'
-            ] 
+prompt_p2 = """\n\nReturn only the label in the following format\nLabel: "..."."""

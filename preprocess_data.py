@@ -1,9 +1,10 @@
-import re
 import functools
+import logging
+import re
 import time
 import numpy as np
 import pandas as pd
-from cuml.cluster import HDBSCAN
+from cuml.cluster import HDBSCAN, KMeans
 from functools import wraps
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
@@ -11,7 +12,6 @@ from sentence_transformers import SentenceTransformer
 from umap import UMAP
 
 np.random.seed(8)
-
 
 class DataProcessor:
     """
@@ -39,6 +39,19 @@ class DataProcessor:
         self.no_url = False
         self.extract_url_col = False
         self.read_file()
+        
+        
+        file_name = file_path.split('.')[0]
+        log_file = f'{file_name}.log'
+        
+        logging.basicConfig(level=logging.DEBUG, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler(log_file),
+                        logging.StreamHandler()
+                    ])
+
+        self.logger = logging.getLogger(__name__)
 
     @staticmethod
     def time_function(func):
@@ -86,11 +99,11 @@ class DataProcessor:
         Returns:
             - returns string without url
         """
-        
-        try: 
+
+        try:
             url_pattern = r"https?://\S+"
             return re.sub(url_pattern, '', string)
-        except: 
+        except:
             return ''
 
     def extract_url_helper(self, string):
@@ -162,96 +175,96 @@ class DataProcessor:
         Returns: 
             - (bool): variable expressing whether it is removed/deleted
         """
-        
+
         return string in ['[removed]', '[deleted]']
-    
-    def get_language_helper(self, string): 
+
+    def get_language_helper(self, string):
         """
         Purpose: 
             - Given a string detect the language
-        
+
         Args: 
             - string (str): string to be checked for language 
-            
+
         Returns: 
             - lang (str): language that the string belongs to 
-        """ 
-        
-        try: 
-            lang = detect(string) 
-        except: 
-            lang = 'error' 
-        
-        return lang 
-    
-    def check_language_helper(self, string): 
+        """
+
+        try:
+            lang = detect(string)
+        except:
+            lang = 'error'
+
+        return lang
+
+    def check_language_helper(self, string):
         """
         Purpose: 
             - Given a string determine whether the language is compatible with Meta-Llama-3 
-        
+
         Args: 
             - string (str): string to examined for compatibality 
-            
+
         Returns: 
             - lang_check (bool): variable representing compatibality 
-        """ 
-        
-        lang_list = ["en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko"]
+        """
+
+        lang_list = ["en", "es", "fr", "de", "it",
+                     "pt", "nl", "ru", "zh", "ja", "ko"]
         lang_check = string in lang_list
-        
-        return lang_check 
-    
-    def remove_emoji_helper(self, text): 
-        
+
+        return lang_check
+
+    def remove_emoji_helper(self, text):
         """
         Purpose: 
             - Given a string remove the emojis from it 
-            
+
         Args: 
             - text (str): text to have emojis removed 
-        
+
         Returns: 
             - (str): string without any emojis 
         """
         emoji_pattern = re.compile(
-                "["  
-                "\U0001F600-\U0001F64F"  # emoticons
-                "\U0001F300-\U0001F5FF"  # symbols & pictographs
-                "\U0001F680-\U0001F6FF"  # transport & map symbols
-                "\U0001F1E0-\U0001F1FF"  # flags (iOS)
-                "\U00002702-\U000027B0"  # Dingbats
-                "\U000024C2-\U0001F251"  # Additional symbols and pictographs
-                "\U0001f926-\U0001f937"  # Gestures and people related emojis
-                "\U00010000-\U0010ffff"  # Supplementary characters in unicode 
-                "\u2640-\u2642"          # Male and female symbols
-                "\u2600-\u2B55"          # Weather and geometry 
-                "\u200d"
-                "\u23cf"
-                "\u23e9"
-                "\u231a"
-                "\u3030"
-                "\ufe0f"
-                "]+", flags=re.UNICODE
-            )
+            "["
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F680-\U0001F6FF"  # transport & map symbols
+            "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            "\U00002702-\U000027B0"  # Dingbats
+            "\U000024C2-\U0001F251"  # Additional symbols and pictographs
+            "\U0001f926-\U0001f937"  # Gestures and people related emojis
+            "\U00010000-\U0010ffff"  # Supplementary characters in unicode
+            "\u2640-\u2642"          # Male and female symbols
+            "\u2600-\u2B55"          # Weather and geometry
+            "\u200d"
+            "\u23cf"
+            "\u23e9"
+            "\u231a"
+            "\u3030"
+            "\ufe0f"
+            "]+", flags=re.UNICODE
+        )
         return emoji_pattern.sub(r'', text)
-    
-    def format_str_helper(self, string): 
+
+    def format_str_helper(self, string):
         """
         Purpose: 
             - Given a string remove any whitespace/line breaks
-        
+
         Args: 
             - string (str): text to be editted
-        
+
         Returns: 
             - fstring (str): editted string 
-        """ 
-        
-        fstring = re.sub('\s+',' ', string)
+        """
+
+        fstring = re.sub('\s+', ' ', string)
         fstring = fstring.strip()
 
         return fstring
-        
+
     def process_array_string(self, string):
         """
         Purpose: 
@@ -282,7 +295,7 @@ class DataProcessor:
         """
 
         self.extract_url_col = True
-        
+
         urls = self.df[col_name].apply(lambda x: self.extract_url_helper(x))
         self.df['extracted_urls'] = urls.apply(self.parse_url_helper)
 
@@ -356,74 +369,71 @@ class DataProcessor:
         Returns: 
             - tmp_df (pd.DataFrame): cleaned dataframe 
         """
-        
-        def filters(*condition): 
+
+        def filters(*condition):
             return functools.reduce(np.logical_and, condition)
 
-        
-        
         start = time.time()
-        print('\t- Removing URLS') 
+        print('\t- Removing URLS')
         text = self.df[text_col].apply(lambda x: self.remove_url_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
-        print('\t- Removing Emojis') 
+        print('\t- Removing Emojis')
         text = text.apply(lambda x: self.remove_emoji_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
-        print('\t- Formatting strings') 
+        print('\t- Formatting strings')
         text = text.apply(lambda x: self.format_str_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
         print('\t- Getting length')
         length = text.apply(lambda x: self.get_length_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
         print('\t- Checking for reddit removed')
         reddit_check = text.apply(lambda x: self.reddit_remove_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
         print('\t- Getting languages')
         langs = text.apply(lambda x: self.get_language_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
+
         start = time.time()
         print('\t- Checking languages')
         lang_check = langs.apply(lambda x: self.check_language_helper(x))
         end = time.time()
         print(f'\t\t- Time taken: {end-start:.2f}s')
-        
-        tmp_df = pd.DataFrame({ 
-            'text': text, 
-            'lang': langs, 
-            'length': length, 
-            'lang_check': lang_check, 
+
+        tmp_df = pd.DataFrame({
+            'text': text,
+            'lang': langs,
+            'length': length,
+            'lang_check': lang_check,
             'reddit_check': reddit_check
         })
-        
-        
-        c1 = length > 2 
-        c2 = ~reddit_check 
+
+        c1 = length > 2
+        c2 = ~reddit_check
         c3 = lang_check
-        
+
         tmp_df = tmp_df[filters(c1, c2, c3)]
         tmp_df = tmp_df.reset_index()
-        
-        self.df = tmp_df.copy() 
-        
+
+        self.df = tmp_df.copy()
+
         return tmp_df
-        
+
     @time_function
     def process_embeddings(self, embd_col=None):
         """
@@ -591,7 +601,8 @@ class DataProcessor:
         print(f'\t- Data is clustered on shape: {data.shape}')
 
         if not self.rd and n_components is not None:
-            data = self.reduce_dimensions(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+            data = self.reduce_dimensions(
+                n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
 
         if min_cluster_size is None:
             min_cluster_size = 15
@@ -604,7 +615,7 @@ class DataProcessor:
 
         clusterer = HDBSCAN(min_cluster_size=min_cluster_size,
                             min_samples=min_samples, cluster_selection_epsilon=epsilon)
-        
+
         print(f'\t- Shape of data to cluster: {data.shape}')
         print(f'\t- Clusterer Params:')
         print(f'\t\t- Min Cluster Size: {min_cluster_size}')
@@ -613,7 +624,7 @@ class DataProcessor:
         labels = clusterer.fit_predict(data)
         lbls, counts = np.unique(labels, return_counts=True)
 
-        num_outliers = counts[lbls == -1].sum() if -1 in lbls else 0 
+        num_outliers = counts[lbls == -1].sum() if -1 in lbls else 0
         num_clusters = counts[lbls != -1].shape[0]
 
         size = data.shape[0]
@@ -625,10 +636,10 @@ class DataProcessor:
         print(f'\t\t- Number of Outliers: {num_outliers}')
 
         return num_clusters, num_outliers, percentage_outliers, labels
-    
+
     @time_function
-    def binary_search_hdbscan(self): 
-        
+    def binary_search_hdbscan(self):
+
         def get_bounds(size):
             if size <= 100:
                 return 5, 10
@@ -638,70 +649,86 @@ class DataProcessor:
                 return 20, 80
             else:
                 return 50, 120
-            
+
         size = len(self.df)
         lower, upper = get_bounds(size)
         l, r = 5, 1023
 
-        num_clusters = [] 
+        num_clusters = []
         num_outliers = []
-        percentage_outliers = [] 
-        min_csize = [] 
-        min_s = [] 
+        percentage_outliers = []
+        min_csize = []
+        min_s = []
         labels_arr = []
 
-        # Searching parameter space 
-        while l <= r: 
+        # Searching parameter space
+        while l <= r:
 
-            min_cluster_size = l + (r - l)//2 
+            min_cluster_size = l + (r - l)//2
             min_samples = min_cluster_size // 2
 
-            n_clust, n_outliers, p_outliers, labels = self.create_clusters(data=self.data, min_cluster_size=min_cluster_size, min_samples=min_cluster_size)
-            
+            n_clust, n_outliers, p_outliers, labels = self.create_clusters(
+                data=self.data, min_cluster_size=min_cluster_size, min_samples=min_cluster_size)
+
             num_clusters.append(n_clust)
             num_outliers.append(n_outliers)
             percentage_outliers.append(p_outliers)
             min_csize.append(min_cluster_size)
-            min_s.append(min_s)
-            labels_arr.append(labels)
-            
-            n_clust, n_outliers, p_outliers, labels = self.create_clusters(data=self.data, min_cluster_size=min_cluster_size, min_samples=min_samples)
-            
-            num_clusters.append(n_clust)
-            num_outliers.append(n_outliers)
-            percentage_outliers.append(p_outliers)
-            min_csize.append(min_cluster_size)
-            min_s.append(min_s)
+            min_s.append(min_cluster_size)
             labels_arr.append(labels)
 
-            # More clusters than needed, need less clusters, increase minimum cluster size to decrease number of clusters 
-            if n_clust > upper: 
-                l = min_cluster_size + 1 
-            # Too little clusters than needed, decrease minimum cluster size to increase number of clusters 
-            elif n_clust < lower: 
-                r = min_cluster_size - 1 
-            else: 
-                break 
-        
+            n_clust, n_outliers, p_outliers, labels = self.create_clusters(
+                data=self.data, min_cluster_size=min_cluster_size, min_samples=min_samples)
+
+            num_clusters.append(n_clust)
+            num_outliers.append(n_outliers)
+            percentage_outliers.append(p_outliers)
+            min_csize.append(min_cluster_size)
+            min_s.append(min_samples)
+            labels_arr.append(labels)
+
+            # More clusters than needed, need less clusters, increase minimum cluster size to decrease number of clusters
+            if n_clust > upper:
+                l = min_cluster_size + 1
+            # Too little clusters than needed, decrease minimum cluster size to increase number of clusters
+            elif n_clust < lower:
+                r = min_cluster_size - 1
+            else:
+                break
+
         # Finding optimal parameters
-        scores = pd.DataFrame({ 
-            'Min Cluster Size': min_csize, 
+        scores = pd.DataFrame({
+            'Min Cluster Size': min_csize,
             'Min Samples': min_s,
-            'Number of Clusters': num_clusters, 
+            'Number of Clusters': num_clusters,
             'Number of Outliers': num_outliers,
-            'Percentage Outliers': percentage_outliers,  
+            'Percentage Outliers': percentage_outliers,
             'Labels': labels_arr
         })
-        
-        condition = (scores['Percentage Outliers'] <= 20) & (scores['Percentage Outliers'] > 0)
+
+        condition = (scores['Percentage Outliers'] <= 25) & (
+            scores['Percentage Outliers'] > 0)
         filtered = scores[condition]
-        params = filtered.loc[filtered['Number of Clusters'].idxmax()]
-        labels = params['Labels']
 
-        self.df['clust_id'] = labels 
+        if (filtered.shape[0] == 0):
+            threshold = scores[scores['Number of Clusters'] > lower]
+            params = threshold.loc[threshold['Percentage Outliers'].idxmin()]
+            labels = params['Labels']
+        else:
+            params = filtered.loc[filtered['Number of Clusters'].idxmax()]
+            labels = params['Labels']
 
-        return labels 
-            
+        self.df['clust_id'] = labels
+        
+        print(f"\t- Params Chosen: ")
+        print(f"\t\t- Min Cluster Size: {params['Min Cluster Size']}")
+        print(f"\t\t- Min Samples: {params['Min Samples']}")
+        print(f"\t\t- Number of Clusters: {params['Number of Clusters']}")
+        print(f"\t\t- Percentage Outliers: {params['Percentage Outliers']}")
+        print(f"\t\t- DataFrame value counts: {self.df.clust_id.value_counts()}")
+
+
+        return labels
 
     @time_function
     def to_csv(self, output_path, cols=None):
